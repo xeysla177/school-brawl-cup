@@ -24,9 +24,9 @@ export function getEnv() {
   };
 }
 
-export async function readJson(event) {
+export async function readJson(request) {
   try {
-    return JSON.parse(event.body || "{}");
+    return await request.json();
   } catch {
     return null;
   }
@@ -96,8 +96,8 @@ export async function getRegistrationOpen(env = getEnv()) {
   return rows?.[0]?.registration_open ?? true;
 }
 
-export async function verifyAdmin(event, env = getEnv()) {
-  const authHeader = event.headers?.authorization || event.headers?.Authorization || "";
+export async function verifyAdmin(request, env = getEnv()) {
+  const authHeader = request.headers.get("authorization") || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) return false;
 
