@@ -4,10 +4,10 @@ import {
   getRegistrationOpen, supabaseRequest, adminError
 } from "./_lib.mjs";
 
-export default async function handler(event, context) {
-  if (event.httpMethod !== "POST") return methodNotAllowed("POST");
+export default async function handler(request, context) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
   try {
-    const body = await readJson(event);
+    const body = await readJson(request);
     if (!body) return json(400, { error: "Не удалось прочитать форму. Проверьте данные." });
 
     // Honeypot: отвечаем нейтрально, но не сохраняем заявку.
@@ -23,7 +23,7 @@ export default async function handler(event, context) {
       return json(403, { error: "Регистрация команд уже закрыта." });
     }
 
-    const ip = context?.ip || event.headers?.["x-nf-client-connection-ip"] || "unknown-client";
+    const ip = context?.ip || request.headers.get("x-nf-client-connection-ip") || "unknown-client";
     const ipHash = createHash("sha256").update(String(ip)).digest("hex");
     const limit = await supabaseRequest("rpc/consume_registration_rate_limit", {
       method: "POST", body: { p_ip_hash: ipHash }, env
