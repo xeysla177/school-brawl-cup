@@ -1,11 +1,10 @@
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 export function json(statusCode, payload, extraHeaders = {}) {
-  return {
-    statusCode,
-    headers: { ...JSON_HEADERS, "cache-control": "no-store", ...extraHeaders },
-    body: JSON.stringify(payload)
-  };
+  return new Response(JSON.stringify(payload), {
+    status: statusCode,
+    headers: { ...JSON_HEADERS, "cache-control": "no-store", ...extraHeaders }
+  });
 }
 
 export function methodNotAllowed(allowed = "POST") {
