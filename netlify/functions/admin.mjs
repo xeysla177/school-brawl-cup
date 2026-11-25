@@ -11,13 +11,13 @@ const EDITABLE_TEXT = {
   reserve_nick: 24, reserve_class: 12
 };
 
-export default async function handler(event) {
-  if (event.httpMethod !== "POST") return methodNotAllowed("POST");
+export default async function handler(request) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
   try {
     const env = getEnv();
-    if (!(await verifyAdmin(event, env))) return json(401, { error: "Доступ запрещён. Войдите под учётной записью организатора." });
+    if (!(await verifyAdmin(request, env))) return json(401, { error: "Доступ запрещён. Войдите под учётной записью организатора." });
 
-    const body = await readJson(event);
+    const body = await readJson(request);
     if (!body || typeof body.action !== "string") return json(400, { error: "Некорректная команда панели." });
 
     if (body.action === "list") {
