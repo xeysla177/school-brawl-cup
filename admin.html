@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#10101c"><meta name="robots" content="noindex,nofollow"><title>Панель организатора — SCHOOL BRAWL CUP</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"><script src="js/common.js" defer></script><script src="js/admin.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#10101c"><meta name="robots" content="noindex,nofollow"><title>Панель организатора — SCHOOL BRAWL CUP</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/tournament.css"><script src="js/common.js" defer></script><script src="js/admin.js" defer></script><script src="js/tournament-admin.js" defer></script></head>
 <body><div class="site-shell admin-shell">
 <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark">S<span>B</span></span><span class="brand-name">SCHOOL <b>BRAWL CUP</b></span></a><a class="admin-back" href="index.html">← На сайт</a></header>
 <main class="section-wrap admin-page">
-  <div class="page-heading"><div class="eyebrow">PRIVATE AREA · ORGANIZER ACCESS</div><h1>ПАНЕЛЬ <span>ОРГАНИЗАТОРА</span></h1><p>Управление заявками, публикацией команд и статусом регистрации.</p></div>
+  <div class="page-heading"><div class="eyebrow">PRIVATE AREA · ORGANIZER ACCESS</div><h1>ПАНЕЛЬ <span>ОРГАНИЗАТОРА</span></h1><p>Управление заявками, публикацией команд и проведением турнира.</p></div>
   <section class="login-panel" id="login-panel"><div class="login-symbol">⌑</div><div class="eyebrow">ЗАЩИЩЁННЫЙ ДОСТУП</div><h2>С возвращением</h2><p>Войдите под учётной записью организатора турнира.</p><form id="login-form"><label class="field-label" for="admin-email">Электронная почта</label><input id="admin-email" type="email" autocomplete="username" required placeholder="organizer@example.com"><label class="field-label" for="admin-password">Пароль</label><input id="admin-password" type="password" autocomplete="current-password" required placeholder="Ваш пароль"><div class="form-message" id="login-message" role="status" aria-live="polite"></div><button class="button button-primary submit-button" id="login-button" type="submit">Войти в панель <span>↗</span></button></form><div class="login-footnote">Создайте учётную запись администратора в Supabase. Самостоятельная регистрация на этом сайте отключена.</div></section>
   <section class="dashboard hidden" id="dashboard">
     <div class="dashboard-toolbar"><div><div class="eyebrow">CONTROL ROOM</div><h2>УПРАВЛЕНИЕ <span>ТУРНИРОМ</span></h2></div><button class="button button-ghost button-small" id="logout-button" type="button">Выйти ↗</button></div>
@@ -13,6 +13,33 @@
     <div class="admin-list-heading"><div><div class="eyebrow">ROSTER MANAGEMENT</div><h3>ЗАЯВКИ <span>КОМАНД</span></h3></div><div class="admin-filters"><input id="admin-search" type="search" placeholder="Поиск команды…" aria-label="Поиск команды"><select id="status-filter" aria-label="Фильтр по статусу"><option value="all">Все статусы</option><option value="pending">На проверке</option><option value="approved">Подтверждена</option><option value="rejected">Отклонена</option></select></div></div>
     <div class="admin-team-list" id="admin-team-list"><div class="empty-state">Загружаем заявки…</div></div>
     <div class="admin-notice" id="admin-notice" role="status" aria-live="polite"></div>
+
+    <section class="tournament-admin-section" id="tournament-admin">
+      <div class="eyebrow">BRACKET CONTROL</div><h3>УПРАВЛЕНИЕ <span>ТУРНИРОМ</span></h3>
+      <form class="tournament-create-card" id="tournament-create-form">
+        <h4>Создать новый турнир</h4>
+        <div class="tournament-form-grid">
+          <label>Название турнира<input id="tournament-new-name" maxlength="80" value="SCHOOL BRAWL CUP"></label>
+          <label>Место проведения<input id="tournament-new-venue" maxlength="200" placeholder="Адрес или название места"></label>
+          <label>Дата и время<input id="tournament-new-start" type="datetime-local"></label>
+        </div>
+        <button class="button button-primary" type="submit">Создать турнир и сетку ↗</button>
+        <p class="form-message">Сетка создаётся из опубликованных команд. Соперники распределяются случайно.</p>
+      </form>
+      <div class="hidden" id="tournament-active-admin">
+        <div class="tournament-current-head"><div><h4 id="tournament-current-name">Активный турнир</h4><p id="tournament-current-info"></p></div><button class="admin-action delete" id="tournament-finish-button" type="button">Завершить турнир</button></div>
+        <form class="tournament-info-card" id="tournament-info-form">
+          <div class="tournament-form-grid">
+            <label>Название<input id="tournament-edit-name" maxlength="80"></label>
+            <label>Место проведения<input id="tournament-edit-venue" maxlength="200"></label>
+            <label>Дата и время<input id="tournament-edit-start" type="datetime-local"></label>
+          </div>
+          <button class="admin-action" type="submit">Сохранить место и время</button>
+        </form>
+        <div id="tournament-admin-matches" class="tournament-admin-matches"></div>
+      </div>
+      <div id="tournament-admin-notice" role="status" aria-live="polite"></div>
+    </section>
   </section>
 </main>
 <footer class="footer section-wrap"><a class="brand footer-brand" href="index.html"><span class="brand-mark">S<span>B</span></span><span class="brand-name">SCHOOL <b>BRAWL CUP</b></span></a><span>Закрытая панель организатора</span><a href="index.html">На главную ↗</a></footer>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10101c">
+  <title>Турнир — SCHOOL BRAWL CUP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/tournament.css">
+  <script src="js/common.js" defer></script>
+  <script src="js/tournament.js" defer></script>
+</head>
+<body>
+<div class="site-shell">
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-mark">S<span>B</span></span><span class="brand-name">SCHOOL <b>BRAWL CUP</b></span></a>
+    <button class="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false"><span></span><span></span></button>
+    <nav class="main-nav" aria-label="Основная навигация">
+      <a href="index.html">Главная</a><a href="teams.html">Участники</a><a class="active" href="tournament.html">Турнир</a><a href="register.html">Регистрация</a><a class="nav-admin" href="admin.html">Организатор <span>↗</span></a>
+    </nav>
+  </header>
+
+  <main class="section-wrap inner-page tournament-page">
+    <div class="page-heading">
+      <div class="eyebrow">SCHOOL BRAWL CUP · LIVE BRACKET</div>
+      <h1>ТУРНИР <span>ИСТОРИЯ</span></h1>
+      <p>Следи за сеткой, результатами матчей, картами и временем проведения.</p>
+    </div>
+
+    <div class="tournament-tabs" role="tablist">
+      <button class="tournament-tab active" type="button" data-tab="active">Текущий турнир</button>
+      <button class="tournament-tab" type="button" data-tab="history">Прошлые турниры</button>
+    </div>
+
+    <section id="active-view">
+      <div id="active-tournament"><div class="empty-state">Загружаем турнир…</div></div>
+    </section>
+    <section id="history-view" class="hidden">
+      <div id="history-list"><div class="empty-state">Загружаем историю…</div></div>
+    </section>
+  </main>
+
+  <footer class="footer section-wrap">
+    <a class="brand footer-brand" href="index.html"><span class="brand-mark">S<span>B</span></span><span class="brand-name">SCHOOL <b>BRAWL CUP</b></span></a>
+    <span>Школьный турнир · 2026</span><a href="admin.html">Панель организатора ↗</a>
+  </footer>
+</div>
+</body>
+</html>

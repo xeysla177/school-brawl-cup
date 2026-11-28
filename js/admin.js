@@ -11,6 +11,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let accessToken = null;
   let allTeams = [];
 
+  function emitAuth() {
+    window.dispatchEvent(new CustomEvent("sbc:admin-auth", { detail: { token: accessToken } }));
+  }
+
   async function getConfig() {
     const response = await fetch(`${API}/config`);
     const data = await response.json().catch(() => ({}));
@@ -98,6 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function enterDashboard() {
     loginPanel.classList.add("hidden");
     dashboard.classList.remove("hidden");
+    emitAuth();
     try {
       await Promise.all([refreshTeams(), refreshSettings()]);
     } catch (error) {
@@ -107,6 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function logout() {
     accessToken = null;
+    emitAuth();
     dashboard.classList.add("hidden");
     loginPanel.classList.remove("hidden");
     loginForm.reset();
@@ -132,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       setMessage(loginMessage, error.message, "error");
       accessToken = null;
+      emitAuth();
     } finally {
       loginButton.disabled = false;
       loginButton.innerHTML = 'Войти в панель <span>↗</span>';
