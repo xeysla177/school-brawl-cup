@@ -5,7 +5,7 @@
   "type": "module",
   "description": "School Brawl Stars tournament registration and organizer dashboard",
   "scripts": {
-    "check": "node --check netlify/functions/_lib.mjs && node --check netlify/functions/config.mjs && node --check netlify/functions/register.mjs && node --check netlify/functions/status.mjs && node --check netlify/functions/teams.mjs && node --check netlify/functions/admin.mjs && node --check js/common.js && node --check js/registration.js && node --check js/teams.js && node --check js/admin.js",
+    "check": "node --check netlify/functions/_lib.mjs && node --check netlify/functions/_tournament.mjs && node --check netlify/functions/tournament.mjs && node --check netlify/functions/tournament-admin.mjs && node --check netlify/functions/config.mjs && node --check netlify/functions/register.mjs && node --check netlify/functions/status.mjs && node --check netlify/functions/teams.mjs && node --check netlify/functions/admin.mjs && node --check js/common.js && node --check js/registration.js && node --check js/teams.js && node --check js/admin.js && node --check js/tournament.js && node --check js/tournament-admin.js",
     "test": "node --test tests/*.test.mjs"
   }
 }

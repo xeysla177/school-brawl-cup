@@ -2,30 +2,13 @@ import {
   json, methodNotAllowed, getEnv, readJson, verifyAdmin,
   supabaseRequest, cleanText, adminError
 } from "./_lib.mjs";
-
-const RANKED_MAPS = {
-  "Захват кристаллов": ["Double Swoosh", "Gem Fort", "Hard Rock Mine", "Undermine"],
-  "Ограбление": ["Bridge Too Far", "Hot Potato", "Kaboom Canyon", "Safe Zone"],
-  "Награда за поимку": ["Dry Season", "Hideout", "Layer Cake", "Shooting Star"],
-  "Броулбол": ["Center Stage", "Pinball Dreams", "Sneaky Fields", "Triple Dribble"],
-  "Горячая зона": ["Dueling Beetles", "Open Business", "Parallel Plays", "Ring of Fire"],
-  "Нокаут": ["Belle's Rock", "Flaring Phoenix", "New Horizons", "Out in the Open"]
-};
+import { RANKED_MAPS, shuffle, buildBracket, getPlacements } from "./_tournament.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function shuffle(items) {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 async function activeTournament(env) {
   const rows = await supabaseRequest(
-    "tournaments?select=id,name,status,venue,starts_at,champion_team_id,created_at,completed_at&status=eq.active&limit=1",
+    "tournaments?select=id,name,status,venue,details,starts_at,champion_team_id,created_at,completed_at&status=eq.active&limit=1",
     { env }
   );
   return rows?.[0] || null;
@@ -47,13 +30,6 @@ async function readMatches(tournamentId, env) {
   ) || [];
 }
 
-/*
- * Проходит сетку сверху вниз:
- * 1. Передаёт победителей в нужные слоты следующего раунда.
- * 2. Если оба матча-предшественника уже завершены, а в текущем матче
- *    оказалась только одна команда, автоматически назначает ей BYE.
- * 3. Сохраняет все изменения в Supabase.
- */
 async function propagateWinners(matches, env) {
   const byId = new Map(matches.map(match => [match.id, { ...match }]));
   const ordered = [...byId.values()].sort(
@@ -64,42 +40,30 @@ async function propagateWinners(matches, env) {
     if (!match.winner_team_id || !match.next_match_id || !match.next_slot) return;
     const target = byId.get(match.next_match_id);
     if (!target) throw new Error("В сетке найдена неверная связь между матчами.");
-
     const field = match.next_slot === 1 ? "team1_id" : "team2_id";
     if (target[field] && target[field] !== match.winner_team_id) {
-      throw new Error("Нельзя обновить сетку: слот следующего матча уже занят другой командой.");
+      throw new Error("Слот следующего матча уже занят другой командой.");
     }
     target[field] = match.winner_team_id;
   }
 
   for (const match of ordered) {
-    // К этому моменту все матчи предыдущего раунда уже обработаны.
     if (match.round_number > 1 && match.status === "pending") {
       const feeders = ordered.filter(item => item.next_match_id === match.id);
-      const feedersResolved =
-        feeders.length === 2 &&
-        feeders.every(item =>
-          ["completed", "bye"].includes(item.status) && Boolean(item.winner_team_id)
-        );
-
-      if (feedersResolved) {
-        const hasTeam1 = Boolean(match.team1_id);
-        const hasTeam2 = Boolean(match.team2_id);
-
-        if (hasTeam1 !== hasTeam2) {
-          match.winner_team_id = match.team1_id || match.team2_id;
-          match.status = "bye";
-        }
+      const feedersResolved = feeders.length === 2 && feeders.every(item =>
+        ["completed", "bye"].includes(item.status) && Boolean(item.winner_team_id)
+      );
+      if (feedersResolved && Boolean(match.team1_id) !== Boolean(match.team2_id)) {
+        match.winner_team_id = match.team1_id || match.team2_id;
+        match.status = "bye";
       }
     }
-
-    if (["completed", "bye"].includes(match.status)) {
-      sendWinner(match);
-    }
+    if (["completed", "bye"].includes(match.status)) sendWinner(match);
   }
 
+  const originals = new Map(matches.map(match => [match.id, match]));
   const changed = ordered.filter(match => {
-    const original = matches.find(item => item.id === match.id);
+    const original = originals.get(match.id);
     return original && (
       original.team1_id !== match.team1_id ||
       original.team2_id !== match.team2_id ||
@@ -108,18 +72,19 @@ async function propagateWinners(matches, env) {
     );
   });
 
-  await Promise.all(changed.map(match => patchById("tournament_matches", match.id, {
-    team1_id: match.team1_id,
-    team2_id: match.team2_id,
-    winner_team_id: match.winner_team_id,
-    status: match.status,
-    updated_at: new Date().toISOString()
-  }, env)));
+  for (const match of changed) {
+    await patchById("tournament_matches", match.id, {
+      team1_id: match.team1_id,
+      team2_id: match.team2_id,
+      winner_team_id: match.winner_team_id,
+      status: match.status,
+      updated_at: new Date().toISOString()
+    }, env);
+  }
 }
 
 async function deleteTournamentDraft(tournamentId, env) {
   const id = encodeURIComponent(tournamentId);
-  // Удаляем только незавершённую заготовку, если создание оборвалось на середине.
   await supabaseRequest(`tournament_matches?tournament_id=eq.${id}`, {
     method: "DELETE", prefer: "return=minimal", env
   });
@@ -129,95 +94,6 @@ async function deleteTournamentDraft(tournamentId, env) {
   await supabaseRequest(`tournaments?id=eq.${id}&status=eq.active`, {
     method: "DELETE", prefer: "return=minimal", env
   });
-}
-
-function buildBracket(tournamentId, tournamentTeams) {
-  const teamIds = tournamentTeams.map(team => team.id);
-  const bracketSize = 2 ** Math.ceil(Math.log2(teamIds.length));
-  const roundCount = Math.log2(bracketSize);
-  const firstRoundMatchCount = bracketSize / 2;
-  const byeCount = bracketSize - teamIds.length;
-  const matches = [];
-  let teamIndex = 0;
-
-  // BYE-места распределяются первыми. Оставшиеся команды образуют пары.
-  // Так для 6 команд будет 2 BYE и 2 полноценных матча, а не пустой матч.
-  for (let index = 0; index < firstRoundMatchCount; index++) {
-    let team1Id = null;
-    let team2Id = null;
-    let status = "pending";
-    let winnerTeamId = null;
-
-    if (index < byeCount) {
-      team1Id = teamIds[teamIndex++];
-      status = "bye";
-      winnerTeamId = team1Id;
-    } else {
-      team1Id = teamIds[teamIndex++];
-      team2Id = teamIds[teamIndex++];
-    }
-
-    matches.push({
-      id: crypto.randomUUID(),
-      tournament_id: tournamentId,
-      round_number: 1,
-      match_number: index + 1,
-      team1_id: team1Id,
-      team2_id: team2Id,
-      winner_team_id: winnerTeamId,
-      score1: null,
-      score2: null,
-      mode: null,
-      map: null,
-      selection_method: "manual",
-      status,
-      next_match_id: null,
-      next_slot: null
-    });
-  }
-
-  for (let round = 2; round <= roundCount; round++) {
-    const count = bracketSize / (2 ** round);
-    for (let index = 0; index < count; index++) {
-      matches.push({
-        id: crypto.randomUUID(),
-        tournament_id: tournamentId,
-        round_number: round,
-        match_number: index + 1,
-        team1_id: null,
-        team2_id: null,
-        winner_team_id: null,
-        score1: null,
-        score2: null,
-        mode: null,
-        map: null,
-        selection_method: "manual",
-        status: "pending",
-        next_match_id: null,
-        next_slot: null
-      });
-    }
-  }
-
-  const matchesByRound = new Map();
-  for (const match of matches) {
-    if (!matchesByRound.has(match.round_number)) matchesByRound.set(match.round_number, []);
-    matchesByRound.get(match.round_number).push(match);
-  }
-
-  for (const match of matches) {
-    if (match.round_number >= roundCount) continue;
-    const nextRound = matchesByRound.get(match.round_number + 1);
-    const nextMatch = nextRound[Math.floor((match.match_number - 1) / 2)];
-    match.next_match_id = nextMatch.id;
-    match.next_slot = match.match_number % 2 === 1 ? 1 : 2;
-  }
-
-  if (teamIndex !== teamIds.length) {
-    throw new Error("Не удалось распределить все команды по турнирной сетке.");
-  }
-
-  return matches;
 }
 
 async function createTournament(body, env) {
@@ -236,27 +112,24 @@ async function createTournament(body, env) {
 
   const name = cleanText(body.name, 80) || "SCHOOL BRAWL CUP";
   const venue = cleanText(body.venue, 200);
+  const details = cleanText(body.details, 1000);
   let startsAt = null;
 
   if (body.starts_at) {
     const parsed = new Date(body.starts_at);
-    if (Number.isNaN(parsed.getTime())) {
-      return json(400, { error: "Проверьте дату и время турнира." });
-    }
+    if (Number.isNaN(parsed.getTime())) return json(400, { error: "Проверьте дату и время турнира." });
     startsAt = parsed.toISOString();
   }
 
   let tournamentId = null;
-
   try {
-    const tournamentRows = await supabaseRequest("tournaments", {
+    const rows = await supabaseRequest("tournaments", {
       method: "POST",
-      body: [{ name, venue, starts_at: startsAt, status: "active" }],
+      body: [{ name, venue, details, starts_at: startsAt, status: "active" }],
       prefer: "return=representation",
       env
     });
-
-    const tournament = tournamentRows?.[0];
+    const tournament = rows?.[0];
     if (!tournament?.id) throw new Error("Не удалось создать турнир.");
     tournamentId = tournament.id;
 
@@ -279,29 +152,19 @@ async function createTournament(body, env) {
     }));
 
     await supabaseRequest("tournament_teams", {
-      method: "POST",
-      body: tournamentTeams,
-      prefer: "return=minimal",
-      env
+      method: "POST", body: tournamentTeams, prefer: "return=minimal", env
     });
 
     const matches = buildBracket(tournamentId, tournamentTeams);
     await supabaseRequest("tournament_matches", {
-      method: "POST",
-      body: matches,
-      prefer: "return=minimal",
-      env
+      method: "POST", body: matches, prefer: "return=minimal", env
     });
-
     await propagateWinners(matches, env);
-    return json(201, { ok: true, tournament_id: tournamentId });
+    return json(201, { ok: true, tournament_id: tournamentId, team_count: tournamentTeams.length });
   } catch (error) {
     if (tournamentId) {
-      try {
-        await deleteTournamentDraft(tournamentId, env);
-      } catch (cleanupError) {
-        console.error("Не удалось очистить незавершённую заготовку турнира:", cleanupError);
-      }
+      try { await deleteTournamentDraft(tournamentId, env); }
+      catch (cleanupError) { console.error("Не удалось очистить незавершённый турнир:", cleanupError); }
     }
     throw error;
   }
@@ -317,10 +180,7 @@ export default async function handler(request) {
     }
 
     const body = await readJson(request);
-    if (!body || typeof body.action !== "string") {
-      return json(400, { error: "Некорректная команда." });
-    }
-
+    if (!body || typeof body.action !== "string") return json(400, { error: "Некорректная команда." });
     if (body.action === "create") return await createTournament(body, env);
 
     const tournament = await activeTournament(env);
@@ -330,31 +190,25 @@ export default async function handler(request) {
       const patch = {
         name: cleanText(body.name, 80) || "SCHOOL BRAWL CUP",
         venue: cleanText(body.venue, 200),
+        details: cleanText(body.details, 1000),
         starts_at: null,
         updated_at: new Date().toISOString()
       };
-
       if (body.starts_at) {
         const parsed = new Date(body.starts_at);
-        if (Number.isNaN(parsed.getTime())) {
-          return json(400, { error: "Проверьте дату и время." });
-        }
+        if (Number.isNaN(parsed.getTime())) return json(400, { error: "Проверьте дату и время." });
         patch.starts_at = parsed.toISOString();
       }
-
       await patchById("tournaments", tournament.id, patch, env);
       return json(200, { ok: true });
     }
 
     if (body.action === "set_match") {
-      if (!UUID.test(body.match_id || "")) {
-        return json(400, { error: "Некорректный матч." });
-      }
-
+      if (!UUID.test(body.match_id || "")) return json(400, { error: "Некорректный матч." });
       const mode = cleanText(body.mode, 40);
       const map = cleanText(body.map, 80);
       if (!Object.hasOwn(RANKED_MAPS, mode) || !RANKED_MAPS[mode].includes(map)) {
-        return json(400, { error: "Выберите режим и карту из списка Ranked." });
+        return json(400, { error: "Выберите режим и карту из актуального списка Ranked." });
       }
 
       const rows = await supabaseRequest(
@@ -363,21 +217,17 @@ export default async function handler(request) {
       );
       const match = rows?.[0];
       if (!match) return json(404, { error: "Матч не найден." });
-      if (["completed", "bye"].includes(match.status)) {
-        return json(409, { error: "Этот матч уже завершён." });
-      }
+      if (["completed", "bye"].includes(match.status)) return json(409, { error: "Этот матч уже завершён." });
       if (!match.team1_id || !match.team2_id) {
         return json(409, { error: "Обе команды ещё не определились. Нельзя назначить карту заранее." });
       }
 
       await patchById("tournament_matches", body.match_id, {
-        mode,
-        map,
+        mode, map,
         selection_method: body.selection_method === "random" ? "random" : "manual",
         status: "live",
         updated_at: new Date().toISOString()
       }, env);
-
       return json(200, { ok: true });
     }
 
@@ -385,27 +235,28 @@ export default async function handler(request) {
       if (!UUID.test(body.match_id || "") || !UUID.test(body.winner_team_id || "")) {
         return json(400, { error: "Выберите матч и победителя." });
       }
-
       const rows = await supabaseRequest(
         `tournament_matches?select=*&id=eq.${encodeURIComponent(body.match_id)}&tournament_id=eq.${encodeURIComponent(tournament.id)}&limit=1`,
         { env }
       );
       const match = rows?.[0];
-
       if (!match) return json(404, { error: "Матч не найден." });
-      if (["completed", "bye"].includes(match.status)) {
-        return json(409, { error: "Этот матч уже завершён." });
-      }
+      if (["completed", "bye"].includes(match.status)) return json(409, { error: "Этот матч уже завершён." });
       if (!match.team1_id || !match.team2_id ||
           ![match.team1_id, match.team2_id].includes(body.winner_team_id)) {
         return json(400, { error: "Победитель должен быть одной из команд этого матча." });
       }
-
+      if (!match.mode || !match.map) {
+        return json(400, { error: "Сначала назначьте режим и карту матча." });
+      }
+      if (body.score1 === "" || body.score2 === "" || body.score1 == null || body.score2 == null) {
+        return json(400, { error: "Укажите счёт обеих команд." });
+      }
       const score1 = Number(body.score1);
       const score2 = Number(body.score2);
       if (!Number.isInteger(score1) || !Number.isInteger(score2) ||
-          score1 < 0 || score2 < 0 || score1 === score2) {
-        return json(400, { error: "Укажите корректный счёт: ничья не определяет победителя." });
+          score1 < 0 || score2 < 0 || score1 > 99 || score2 > 99 || score1 === score2) {
+        return json(400, { error: "Укажите корректный счёт от 0 до 99. Ничья не определяет победителя." });
       }
       const scoreWinner = score1 > score2 ? match.team1_id : match.team2_id;
       if (scoreWinner !== body.winner_team_id) {
@@ -413,47 +264,37 @@ export default async function handler(request) {
       }
 
       await patchById("tournament_matches", match.id, {
-        score1,
-        score2,
-        winner_team_id: body.winner_team_id,
-        status: "completed",
-        updated_at: new Date().toISOString()
+        score1, score2, winner_team_id: body.winner_team_id,
+        status: "completed", updated_at: new Date().toISOString()
       }, env);
-
-      const allMatches = await readMatches(tournament.id, env);
-      await propagateWinners(allMatches, env);
+      await propagateWinners(await readMatches(tournament.id, env), env);
       return json(200, { ok: true });
     }
 
     if (body.action === "finish") {
       const matches = await readMatches(tournament.id, env);
-      const finalRound = Math.max(0, ...matches.map(match => match.round_number));
-      const finalMatch = matches.find(match => match.round_number === finalRound);
-
-      if (!finalMatch || !finalMatch.winner_team_id ||
-          !["completed", "bye"].includes(finalMatch.status)) {
-        return json(400, {
-          error: "Нельзя завершить турнир: финальный матч ещё не определил победителя."
-        });
+      const placements = getPlacements(matches);
+      if (!placements?.first || !placements.second) {
+        return json(400, { error: "Нельзя завершить турнир: финальный матч ещё не определил победителя." });
       }
 
       const entries = await supabaseRequest(
         `tournament_teams?select=id,source_team_id&tournament_id=eq.${encodeURIComponent(tournament.id)}`,
         { env }
       );
-
-      await Promise.all((entries || [])
-        .filter(team => team.source_team_id)
-        .map(team => patchById("teams", team.source_team_id, { is_public: false }, env)));
+      for (const team of (entries || [])) {
+        if (team.source_team_id) {
+          await patchById("teams", team.source_team_id, { is_public: false }, env);
+        }
+      }
 
       await patchById("tournaments", tournament.id, {
         status: "completed",
-        champion_team_id: finalMatch.winner_team_id,
+        champion_team_id: placements.first,
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, env);
-
-      return json(200, { ok: true });
+      return json(200, { ok: true, placements });
     }
 
     return json(400, { error: "Неизвестная команда управления турниром." });
