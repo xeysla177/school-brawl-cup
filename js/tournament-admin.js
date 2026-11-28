@@ -75,9 +75,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const status = match.status === "bye" ? "BYE · ПРОШЛА ДАЛЬШЕ"
       : match.status === "completed" ? "ЗАВЕРШЁН"
       : match.status === "live" ? "ИДЁТ МАТЧ" : "ОЖИДАЕТ";
+    const finalRound = Math.max(...(snapshot?.matches || []).map(item => Number(item.round_number) || 0));
+    const matchTitle = match.round_number === finalRound && match.match_number === 2
+      ? "МАТЧ ЗА 3-Е МЕСТО"
+      : match.round_number === finalRound ? "ФИНАЛ"
+      : `Раунд ${match.round_number} · Матч ${match.match_number}`;
 
     return `<article class="t-admin-match" data-match="${match.id}">
-      <div class="t-admin-match-head"><b>Раунд ${match.round_number} · Матч ${match.match_number}</b><span>${status}</span></div>
+      <div class="t-admin-match-head"><b>${matchTitle}</b><span>${status}</span></div>
       <div class="t-admin-versus">
         <span>${escapeHTML(first?.team_name || "Ожидает")}</span><i>VS</i>
         <span>${escapeHTML(second?.team_name || "Ожидает")}</span>
@@ -118,9 +123,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const teams = snapshot.teams || [];
     const rounds = [...new Set((snapshot.matches || []).map(match => match.round_number))]
       .sort((a, b) => a - b);
+    const hasBronzeMatch = (snapshot.matches || []).some(match =>
+      match.match_number === 2 && match.round_number === rounds[rounds.length - 1]
+    );
     matchesRoot.innerHTML = rounds.map(round =>
       `<section class="t-admin-round">
-        <h4>${round === rounds.length ? "ФИНАЛ" : round === rounds.length - 1 ? "ПОЛУФИНАЛЫ" : `РАУНД ${round}`}</h4>
+        <h4>${round === rounds.length && hasBronzeMatch ? "ФИНАЛ И МАТЧ ЗА 3-Е МЕСТО" : round === rounds.length ? "ФИНАЛ" : round === rounds.length - 1 ? "ПОЛУФИНАЛЫ" : `РАУНД ${round}`}</h4>
         ${snapshot.matches.filter(match => match.round_number === round)
           .map(match => renderMatch(match, teams)).join("")}
       </section>`

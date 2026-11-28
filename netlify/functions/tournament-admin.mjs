@@ -61,6 +61,28 @@ async function propagateWinners(matches, env) {
     if (["completed", "bye"].includes(match.status)) sendWinner(match);
   }
 
+  // Проигравшие двух полуфиналов автоматически попадают в матч за бронзу.
+  const finalRound = Math.max(...ordered.map(match => Number(match.round_number) || 0));
+  const bronzeMatch = ordered.find(match =>
+    match.round_number === finalRound && match.match_number === 2
+  );
+  if (bronzeMatch) {
+    const semifinals = ordered.filter(match => match.round_number === finalRound - 1);
+    const semifinalsResolved = semifinals.length === 2 && semifinals.every(match =>
+      match.status === "completed" && match.winner_team_id &&
+      match.team1_id && match.team2_id
+    );
+    if (semifinalsResolved) {
+      const losers = semifinals.map(match =>
+        [match.team1_id, match.team2_id].find(id => id !== match.winner_team_id)
+      );
+      if (losers.every(Boolean)) {
+        bronzeMatch.team1_id = losers[0];
+        bronzeMatch.team2_id = losers[1];
+      }
+    }
+  }
+
   const originals = new Map(matches.map(match => [match.id, match]));
   const changed = ordered.filter(match => {
     const original = originals.get(match.id);
@@ -276,6 +298,13 @@ export default async function handler(request) {
       const placements = getPlacements(matches);
       if (!placements?.first || !placements.second) {
         return json(400, { error: "Нельзя завершить турнир: финальный матч ещё не определил победителя." });
+      }
+      const bronzeMatch = matches.find(match =>
+        match.round_number === Math.max(...matches.map(item => Number(item.round_number) || 0)) &&
+        match.match_number === 2
+      );
+      if (bronzeMatch && (bronzeMatch.status !== "completed" || !bronzeMatch.winner_team_id)) {
+        return json(400, { error: "Сначала проведите матч за 3-е место и запишите его результат." });
       }
 
       const entries = await supabaseRequest(

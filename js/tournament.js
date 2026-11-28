@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ).join("")}</div>`;
   }
 
-  function matchHTML(match, teams) {
+  function matchHTML(match, teams, finalRound) {
     const first = teamName(match.team1_id, teams);
     const second = teamName(match.team2_id, teams);
     const winner = match.winner_team_id;
@@ -35,8 +35,11 @@ document.addEventListener("DOMContentLoaded", () => {
       : match.status === "live" ? "Идёт матч" : "Ожидает";
     const score = match.score1 !== null && match.score2 !== null
       ? `${match.score1} : ${match.score2}` : "—";
+    const label = match.round_number === finalRound && match.match_number === 2
+      ? "МАТЧ ЗА 3-Е МЕСТО"
+      : match.round_number === finalRound ? "ФИНАЛ" : `МАТЧ ${match.match_number}`;
     return `<article class="bracket-match ${match.status === "live" ? "is-live" : ""}">
-      <div class="bracket-match-top"><span>МАТЧ ${match.match_number}</span><span>${state}</span></div>
+      <div class="bracket-match-top"><span>${label}</span><span>${state}</span></div>
       <div class="bracket-side ${winner === match.team1_id && winner ? "is-winner" : ""}">
         <b>${escapeHTML(first)}</b><strong>${match.score1 ?? "—"}</strong>
       </div>
@@ -63,6 +66,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const team = teams.find(item => item.id === id);
       return team ? `<div class="podium-place"><span>🥉 3 МЕСТО</span><b>${escapeHTML(team.team_name)}</b></div>` : "";
     }).join("");
+    const hasBronzeMatch = (data.matches || []).some(match =>
+      match.match_number === 2 &&
+      match.round_number === Math.max(...(data.matches || []).map(item => Number(item.round_number) || 0))
+    );
+    const thirdText = hasBronzeMatch
+      ? (placements.third || []).length ? "Бронзовый призёр определён в матче за 3-е место." : "Матч за 3-е место ещё не завершён."
+      : "Третье место разделили команды, проигравшие в полуфиналах.";
     return `<section class="tournament-podium">
       <h3>ИТОГИ ТУРНИРА</h3>
       <div class="podium-grid">
@@ -70,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ${card("2 МЕСТО", placements.second, "🥈")}
         ${third}
       </div>
-      <p>Третье место разделяют команды, проигравшие в полуфиналах.</p>
+      <p>${thirdText}</p>
     </section>`;
   }
 
@@ -98,8 +108,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!match) {
       return '<div class="tournament-current-match"><span>ТЕКУЩИЙ МАТЧ</span><b>Сейчас матч не проводится</b></div>';
     }
+    const finalRound = Math.max(...matches.map(item => Number(item.round_number) || 0));
+    const label = match.round_number === finalRound && match.match_number === 2
+      ? "МАТЧ ЗА 3-Е МЕСТО"
+      : match.round_number === finalRound ? "ФИНАЛ" : "СЛЕДУЮЩИЙ МАТЧ";
     return `<div class="tournament-current-match">
-      <span>${match.status === "live" ? "СЕЙЧАС ИДЁТ МАТЧ" : "СЛЕДУЮЩИЙ МАТЧ"}</span>
+      <span>${match.status === "live" ? "СЕЙЧАС ИДЁТ МАТЧ" : label}</span>
       <b>${escapeHTML(teamName(match.team1_id, teams))} <i>VS</i> ${escapeHTML(teamName(match.team2_id, teams))}</b>
       <small>${match.mode ? escapeHTML(match.mode) : "Режим ещё не выбран"}${match.map ? ` · ${escapeHTML(match.map)}` : ""}</small>
     </div>`;
@@ -112,14 +126,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!tournament) return '<div class="empty-state">Сейчас активного турнира нет. Следи за обновлениями!</div>';
 
     const rounds = [...new Set(matches.map(match => match.round_number))].sort((a, b) => a - b);
+    const finalRound = Math.max(...matches.map(item => Number(item.round_number) || 0));
+    const hasBronzeMatch = matches.some(match => match.round_number === finalRound && match.match_number === 2);
     const champion = teams.find(team => team.id === tournament.champion_team_id);
     const bracket = rounds.map(round => {
       const roundMatches = matches.filter(match => match.round_number === round);
       const title = rounds.length === 1 ? "Финал"
-        : round === rounds.length ? "Финал"
-        : round === rounds.length - 1 ? "Полуфиналы" : `Раунд ${round}`;
+        : round === finalRound && hasBronzeMatch ? "ФИНАЛ И МАТЧ ЗА 3-Е МЕСТО"
+        : round === finalRound ? "Финал"
+        : round === finalRound - 1 ? "Полуфиналы" : `Раунд ${round}`;
       return `<section class="bracket-round"><h3>${title}</h3>
-        <div class="bracket-round-list">${roundMatches.map(match => matchHTML(match, teams)).join("")}</div>
+        <div class="bracket-round-list">${roundMatches.map(match => matchHTML(match, teams, finalRound)).join("")}</div>
       </section>`;
     }).join("");
 

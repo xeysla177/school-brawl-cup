@@ -93,6 +93,27 @@ export function buildBracket(tournamentId, tournamentTeams) {
     }
   }
 
+  // Дополнительный матч за бронзу для турниров с четырьмя и более командами.
+  if (teamIds.length >= 4) {
+    matches.push({
+      id: randomUUID(),
+      tournament_id: tournamentId,
+      round_number: roundCount,
+      match_number: 2,
+      team1_id: null,
+      team2_id: null,
+      winner_team_id: null,
+      score1: null,
+      score2: null,
+      mode: null,
+      map: null,
+      selection_method: "manual",
+      status: "pending",
+      next_match_id: null,
+      next_slot: null
+    });
+  }
+
   const matchesByRound = new Map();
   for (const match of matches) {
     if (!matchesByRound.has(match.round_number)) matchesByRound.set(match.round_number, []);
@@ -102,7 +123,7 @@ export function buildBracket(tournamentId, tournamentTeams) {
   for (const match of matches) {
     if (match.round_number >= roundCount) continue;
     const nextRound = matchesByRound.get(match.round_number + 1);
-    const nextMatch = nextRound[Math.floor((match.match_number - 1) / 2)];
+    const nextMatch = nextRound.find(item => item.match_number === Math.ceil(match.match_number / 2));
     match.next_match_id = nextMatch.id;
     match.next_slot = match.match_number % 2 === 1 ? 1 : 2;
   }
@@ -119,6 +140,7 @@ export function getPlacements(matches) {
   const finalRound = Math.max(...matches.map(match => Number(match.round_number) || 0));
   const finalMatch = matches.find(match =>
     match.round_number === finalRound &&
+    match.match_number === 1 &&
     ["completed", "bye"].includes(match.status) &&
     match.winner_team_id
   );
@@ -128,7 +150,20 @@ export function getPlacements(matches) {
   const second = [finalMatch.team1_id, finalMatch.team2_id]
     .find(id => id && id !== first) || null;
 
-  // Без отдельного матча за третье место оба проигравших полуфиналиста делят 3-е место.
+  const bronzeMatch = matches.find(match =>
+    match.round_number === finalRound && match.match_number === 2
+  );
+  if (bronzeMatch) {
+    return {
+      first,
+      second,
+      third: bronzeMatch.status === "completed" && bronzeMatch.winner_team_id
+        ? [bronzeMatch.winner_team_id]
+        : []
+    };
+  }
+
+  // Старые архивы сохраняют прежнее правило: проигравшие полуфиналисты делят третье место.
   const semifinalRound = finalRound - 1;
   const third = semifinalRound < 1 ? [] : matches
     .filter(match =>
